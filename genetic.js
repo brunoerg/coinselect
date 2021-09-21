@@ -24,7 +24,7 @@ function mutation(utxos) {
     // Create a random individual with a random size
     population.push(utils.getRandom(utxos, utils.getRandomInt(1, utxos.length)));
 
-    for (let i = 0; i < POPULATION_SIZE - parseInt(POPULATION_SIZE * 0.8); i++) {
+    for (let i = 0; i < POPULATION_SIZE - parseInt(POPULATION_SIZE * 0.2); i++) {
         let new_individual = [];
         best_solution.forEach(gene => {
             let random = utils.getRandomInt(0, 100);
