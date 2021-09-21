@@ -3,8 +3,8 @@ var utils = require('./utils')
 const POPULATION_SIZE = 5;
 const NUM_GENERATIONS = 1000;
 
-// 40% mutation rate
-const MUTATION_RATE = 40;
+// 80% mutation rate
+const MUTATION_RATE = 80;
 
 let population = [];
 let best_solution = [];
@@ -24,7 +24,7 @@ function mutation(utxos) {
     // Create a random individual with a random size
     population.push(utils.getRandom(utxos, utils.getRandomInt(1, utxos.length)));
 
-    for (let i = 0; i < POPULATION_SIZE - 2; i++) {
+    for (let i = 0; i < POPULATION_SIZE - parseInt(POPULATION_SIZE * 0.8); i++) {
         let new_individual = [];
         best_solution.forEach(gene => {
             let random = utils.getRandomInt(0, 100);
@@ -45,11 +45,11 @@ function fitness(feeRate, utxos, outputs) {
         const individual_value = individual.reduce((a, b) => a + (b.value || 0), 0);
         const scripts_size = individual.reduce((a, b) => a + (utils.inputBytes(b) || 0), 0);
         const final_value = individual_value + (scripts_size * feeRate);
-        
-        if (final_value == value) {
+
+        if (final_value == value + (scripts_size * feeRate)) {
             best_solution = individual;
             return true;
-        } else if (final_value > value && scripts_size < best_script_size) {
+        } else if (final_value > value + (scripts_size * feeRate) && scripts_size < best_script_size) {
             best_solution = individual;
             best_script_size = scripts_size;
         }
