@@ -18,7 +18,7 @@ function createPopulation(utxos, num_genes) {
 function mutation(utxos) {
     population = [];
     
-    //Keep the best solution 
+    // Keep the best previous solution 
     population.push(best_solution);
 
     // Create a random individual with a random size
