@@ -3,16 +3,44 @@ var utils = require('./utils')
 const POPULATION_SIZE = 5;
 const NUM_GENERATIONS = 1000;
 
-// 80% mutation rate
-const MUTATION_RATE = 80;
+// 10 sats/vB
+const LONG_TERM_FEE = 10;
+
+// 50% mutation rate
+const MUTATION_RATE = 50;
 
 let population = [];
 let best_solution = [];
 
-function createPopulation(utxos, num_genes) {
-    for (let i = 0; i < POPULATION_SIZE; i++) {
-        population.push(utils.getRandom(utxos, num_genes));
+function createIndividualTargetExceeded(utxos, target, fee_rate) {
+    
+    for (let i = 0; i < 50000; i++) {
+        let individual = utils.getRandom(utxos, utils.getRandomInt(1, utxos.length));
+        let individual_value = individual.reduce((a, b) => a + (b.value || 0), 0);
+        const scripts_size = individual.reduce((a, b) => a + (utils.inputBytes(b) || 0), 0);
+        individual_value = individual_value + (scripts_size * fee_rate);
+        
+        if (individual_value >= target) {
+            return utxos;
+        }
     }
+
+    return [];
+}
+
+function createPopulation(utxos, num_genes, target, fee_rate) {
+    // Create random individuals
+    for (let i = 0; i < POPULATION_SIZE; i++) {
+        if (i < POPULATION_SIZE - 2) {
+            population.push(utils.getRandom(utxos, num_genes));
+        }
+    }
+
+    // Create an individual that selects all UTXOs in the wallet
+    population.push(utils.getRandom(utxos, utxos.length));
+
+    // Create an individual the target is excedeed
+    population.push(createIndividualTargetExceeded(utxos, target, fee_rate));
 }
 
 function mutation(utxos) {
@@ -24,7 +52,7 @@ function mutation(utxos) {
     // Create a random individual with a random size
     population.push(utils.getRandom(utxos, utils.getRandomInt(1, utxos.length)));
 
-    for (let i = 0; i < POPULATION_SIZE - parseInt(POPULATION_SIZE * 0.2); i++) {
+    for (let i = 0; i < POPULATION_SIZE - (POPULATION_SIZE - 2); i++) {
         let new_individual = [];
         best_solution.forEach(gene => {
             let random = utils.getRandomInt(0, 100);
@@ -38,27 +66,35 @@ function mutation(utxos) {
     }
 }
 
-function fitness(feeRate, utxos, outputs) {
-    const value = utils.sumOrNaN(outputs);
-    let best_script_size = 10000000;
-    for (const individual of population) {
-        const individual_value = individual.reduce((a, b) => a + (b.value || 0), 0);
-        const scripts_size = individual.reduce((a, b) => a + (utils.inputBytes(b) || 0), 0);
-        const final_value = individual_value + (scripts_size * feeRate);
+function getSelectionWaste(individual, fee_rate, target) {
+    let waste = 0;
+    let selected_effective_value = 0;
 
-        if (final_value == value + (scripts_size * feeRate)) {
+    individual.forEach((utxo) => {
+        waste += utils.inputBytes(utxo) * fee_rate - utils.inputBytes(utxo) * LONG_TERM_FEE;
+        selected_effective_value += utxo.value - utils.inputBytes(utxo) * fee_rate;
+    });
+
+    waste += selected_effective_value - target;
+
+    return waste;
+}
+
+// Fitness is based on waste metric
+function fitness(fee_rate, utxos, outputs, value) {
+    let best_value = 100000;
+    population.forEach((individual) => {
+        let waste = getSelectionWaste(individual, fee_rate, value);
+        if (waste == 0) {
             best_solution = individual;
+            console.log(waste);
             return true;
-        } else if (final_value > value + (scripts_size * feeRate) && scripts_size < best_script_size) {
+        } else if (waste > 0 && waste < best_value) {
+            best_value = waste;
+            console.log(waste);
             best_solution = individual;
-            best_script_size = scripts_size;
         }
-    }
-
-    if (best_solution == [])
-        createPopulation(utxos, defineNumGenes(utxos, outputs));
-
-    return false
+    });
 }
 
 function defineNumGenes(utxos, outputs) {
@@ -75,15 +111,17 @@ function defineNumGenes(utxos, outputs) {
     return num_genes;
 }
 
-module.exports = function genetic (utxos, outputs, feeRate) {
+module.exports = function genetic (utxos, outputs, fee_rate) {
+    const value = utils.sumOrNaN(outputs);
+
     // Starts creating the initial population
-    createPopulation(utxos, defineNumGenes(utxos, outputs));
+    createPopulation(utxos, defineNumGenes(utxos, outputs), value, fee_rate);
 
     for (let i = 0; i < NUM_GENERATIONS; i++) {
-        if (fitness(feeRate, utxos, outputs))
+        if (fitness(fee_rate, utxos, outputs, value))
             break;
         mutation(utxos);
     }
 
-    return utils.finalize(best_solution, outputs, feeRate);
+    return utils.finalize(best_solution, outputs, fee_rate);
 }
