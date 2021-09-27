@@ -85,16 +85,13 @@ function fitness(fee_rate, utxos, outputs, value) {
     let best_value = 100000;
     population.forEach((individual) => {
         let waste = getSelectionWaste(individual, fee_rate, value);
-        if (waste == 0) {
-            best_solution = individual;
-            console.log(waste);
-            return true;
-        } else if (waste > 0 && waste < best_value) {
+        if (waste > 0 && waste < best_value) {
             best_value = waste;
-            console.log(waste);
             best_solution = individual;
         }
     });
+
+    return false;
 }
 
 function defineNumGenes(utxos, outputs) {
