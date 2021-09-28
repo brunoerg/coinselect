@@ -1,7 +1,7 @@
 var utils = require('./utils')
 
 const POPULATION_SIZE = 5;
-const NUM_GENERATIONS = 1000;
+const NUM_GENERATIONS = 5000;
 
 // 10 sats/vB
 const LONG_TERM_FEE = 10;
@@ -75,23 +75,23 @@ function getSelectionWaste(individual, fee_rate, target) {
         selected_effective_value += utxo.value - utils.inputBytes(utxo) * fee_rate;
     });
 
+    /* This solution does not cover the needed value */
+    if (selected_effective_value < target) {
+        return 100000;
+    }
+
     waste += selected_effective_value - target;
 
     return waste;
 }
 
 // Fitness is based on waste metric
-function fitness(fee_rate, utxos, outputs, value) {
+function fitness(fee_rate, value) {
     let best_value = 100000;
     population.forEach((individual) => {
         let waste = getSelectionWaste(individual, fee_rate, value);
-        if (waste == 0) {
-            best_solution = individual;
-            console.log(waste);
-            return true;
-        } else if (waste > 0 && waste < best_value) {
+        if (waste < best_value) {
             best_value = waste;
-            console.log(waste);
             best_solution = individual;
         }
     });
@@ -112,14 +112,13 @@ function defineNumGenes(utxos, outputs) {
 }
 
 module.exports = function genetic (utxos, outputs, fee_rate) {
-    const value = utils.sumOrNaN(outputs);
+    const value = utils.sumOrNaN(outputs) + (outputs.reduce((a, b) => a + (utils.outputBytes(b) || 0), 0) * fee_rate);
 
     // Starts creating the initial population
     createPopulation(utxos, defineNumGenes(utxos, outputs), value, fee_rate);
 
     for (let i = 0; i < NUM_GENERATIONS; i++) {
-        if (fitness(fee_rate, utxos, outputs, value))
-            break;
+        fitness(fee_rate, value);
         mutation(utxos);
     }
 
