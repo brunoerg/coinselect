@@ -1,7 +1,7 @@
 var utils = require('./utils')
 
 const POPULATION_SIZE = 5;
-const NUM_GENERATIONS = 5000;
+const NUM_GENERATIONS = 1000;
 
 // 10 sats/vB
 const LONG_TERM_FEE = 10;
@@ -51,7 +51,7 @@ function mutation(utxos) {
 
     // Create a random individual with a random size
     population.push(utils.getRandom(utxos, utils.getRandomInt(1, utxos.length)));
-
+    
     for (let i = 0; i < POPULATION_SIZE - (POPULATION_SIZE - 2); i++) {
         let new_individual = [];
         best_solution.forEach(gene => {
@@ -66,30 +66,38 @@ function mutation(utxos) {
     }
 }
 
-function getSelectionWaste(individual, fee_rate, target) {
+function getSelectionWaste(individual, fee_rate, target, outputs) {
     let waste = 0;
     let selected_effective_value = 0;
-
+    
     individual.forEach((utxo) => {
         waste += utils.inputBytes(utxo) * fee_rate - utils.inputBytes(utxo) * LONG_TERM_FEE;
         selected_effective_value += utxo.value - utils.inputBytes(utxo) * fee_rate;
     });
 
-    /* This solution does not cover the needed value */
+    /* Discard this solution */
     if (selected_effective_value < target) {
         return 100000;
     }
 
-    waste += selected_effective_value - target;
+    let finalized = utils.finalize(individual, outputs, fee_rate);
+
+    /* If there is change, consider its cost */
+    if (finalized.outputs.length > outputs.length) {
+        const cost_change = utils.outputBytes({}) * fee_rate + utils.inputBytes({}) * LONG_TERM_FEE;
+        waste += cost_change;
+    }
+
+    waste += selected_effective_value - target; 
 
     return waste;
 }
 
 // Fitness is based on waste metric
-function fitness(fee_rate, value) {
+function fitness(fee_rate, value, outputs) {
     let best_value = 100000;
     population.forEach((individual) => {
-        let waste = getSelectionWaste(individual, fee_rate, value);
+        let waste = getSelectionWaste(individual, fee_rate, value, outputs);
         if (waste < best_value) {
             best_value = waste;
             best_solution = individual;
@@ -118,7 +126,7 @@ module.exports = function genetic (utxos, outputs, fee_rate) {
     createPopulation(utxos, defineNumGenes(utxos, outputs), value, fee_rate);
 
     for (let i = 0; i < NUM_GENERATIONS; i++) {
-        fitness(fee_rate, value);
+        fitness(fee_rate, value, outputs);
         mutation(utxos);
     }
 
