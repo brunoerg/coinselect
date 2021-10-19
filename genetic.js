@@ -1,13 +1,13 @@
 var utils = require('./utils')
 
 const POPULATION_SIZE = 5;
-const NUM_GENERATIONS = 1000;
+const NUM_GENERATIONS = 10000;
 
 // 10 sats/vB
 const LONG_TERM_FEE = 10;
 
-// 50% mutation rate
-const MUTATION_RATE = 50;
+// 10% mutation rate
+const MUTATION_RATE = 10;
 
 let population = [];
 let best_solution = [];
@@ -43,26 +43,38 @@ function createPopulation(utxos, num_genes, target, fee_rate) {
     population.push(createIndividualTargetExceeded(utxos, target, fee_rate));
 }
 
-function mutation(utxos) {
+function mutation(utxos, generation, fee_rate) {
     population = [];
     
     // Keep the best previous solution 
     population.push(best_solution);
 
-    // Create a random individual with a random size
-    population.push(utils.getRandom(utxos, utils.getRandomInt(1, utxos.length)));
-    
-    for (let i = 0; i < POPULATION_SIZE - (POPULATION_SIZE - 2); i++) {
-        let new_individual = [];
-        best_solution.forEach(gene => {
-            let random = utils.getRandomInt(0, 100);
-            if (random <= MUTATION_RATE) {
-                new_individual.push(utils.getRandom(utxos, 1)[0]);
-            } else {
-                new_individual.push(gene);
-            }
-        });
-        population.push(new_individual);
+    if (generation > parseInt(NUM_GENERATIONS) / 2) {
+        if (fee_rate < LONG_TERM_FEE) {
+            population.push(utils.getRandom(utxos, parseInt(best_solution.length * 1.4)));
+            population.push(utils.getRandom(utxos, parseInt(best_solution.length * 1.2)));
+        } else {
+            population.push(utils.getRandom(utxos, parseInt(best_solution.length * 0.8)));
+            population.push(utils.getRandom(utxos, parseInt(best_solution.length * 0.6)));
+        }
+
+        for (let i = 0; i < POPULATION_SIZE - (POPULATION_SIZE - 3); i++) {
+            let new_individual = [];
+            best_solution.forEach(gene => {
+                let random = utils.getRandomInt(0, 100);
+                if (random <= MUTATION_RATE) {
+                    new_individual.push(utils.getRandom(utxos, 1)[0]);
+                } else {
+                    new_individual.push(gene);
+                }
+            });
+            population.push(new_individual);
+        }
+    } else {
+        // Create random individuals with random size
+        for (let i = 0; i < POPULATION_SIZE - 1; i++) {
+            population.push(utils.getRandom(utxos, utils.getRandomInt(1, utxos.length)));
+        }
     }
 }
 
@@ -88,7 +100,7 @@ function getSelectionWaste(individual, fee_rate, target, outputs) {
         waste += cost_change;
     }
 
-    waste += selected_effective_value - target; 
+    waste += selected_effective_value - target;
 
     return waste;
 }
@@ -100,6 +112,10 @@ function fitness(fee_rate, value, outputs) {
         let waste = getSelectionWaste(individual, fee_rate, value, outputs);
         if (waste < best_value) {
             best_value = waste;
+            if (best_solution != individual) {
+                console.log(individual);
+                console.log(individual.length);
+            }
             best_solution = individual;
         }
     });
@@ -127,7 +143,7 @@ module.exports = function genetic (utxos, outputs, fee_rate) {
 
     for (let i = 0; i < NUM_GENERATIONS; i++) {
         fitness(fee_rate, value, outputs);
-        mutation(utxos);
+        mutation(utxos, i, fee_rate);
     }
 
     return utils.finalize(best_solution, outputs, fee_rate);
